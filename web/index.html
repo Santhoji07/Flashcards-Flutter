@@ -34,5 +34,18 @@
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
+  <script type="module">
+    import {initializeApp} from 'flutter_bootstrap';
+
+    const firebaseConfig = {
+  apiKey: "AIzaSyDeNmIidsd8PoP8uxoOVjiUahRfv3gBC2c",
+  authDomain: "flahcard-9770c.firebaseapp.com",
+  projectId: "flahcard-9770c",
+  storageBucket: "flahcard-9770c.firebasestorage.app",
+  messagingSenderId: "990517797033",
+  appId: "1:990517797033:web:c5c39d3da9b2b2882309b8"
+};
+       const app = initializeApp(firebaseConfig);
+  </script>
 </body>
 </html>
