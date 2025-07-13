@@ -59,12 +59,21 @@ These instructions will help you set up and run the project on your local machin
 
 ```
 lib/
- ├── main.dart
- ├── models/
- ├── screens/
- ├── widgets/
- ├── services/
- └── utils/
+│
+├── auth/
+│   ├── forgot_password.dart
+│   ├── login_page.dart
+│   ├── signup_page.dart
+│   └── splash_screen.dart
+│
+├── home/
+│   └── home_page.dart
+│
+├── screens/
+│   ├── deck_editor.dart
+│   └── flashcard_viewer.dart
+│
+└── main.dart
 ```
 
 - `models/` — Data models for flashcards and decks
