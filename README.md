@@ -20,7 +20,7 @@ A comprehensive flashcards application built with Flutter. This app helps users 
 
 <!-- Add screenshots of your app here -->
 <!-- Example: -->
-<!-- ![Home Screen](screenshots/home.png) -->
+<!-- ![Home Screen](D:\Flutter Flashcards Project\flashcards\image.png) -->
 <!-- ![Deck Screen](screenshots/deck.png) -->
 
 ---
