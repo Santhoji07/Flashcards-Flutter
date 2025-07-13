@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'add_card_page.dart'; // You'll need to create this file
+import 'package:flip_card/flip_card.dart';
 
 class FlashcardViewer extends StatefulWidget {
   final String deckId;
@@ -12,8 +12,9 @@ class FlashcardViewer extends StatefulWidget {
 
 class _FlashcardViewerState extends State<FlashcardViewer> {
   int currentIndex = 0;
-  int knownCount = 0;
   List cards = [];
+  bool _isLoading = true;
+  GlobalKey<FlipCardState> cardKey = GlobalKey<FlipCardState>();
 
   @override
   void initState() {
@@ -22,103 +23,102 @@ class _FlashcardViewerState extends State<FlashcardViewer> {
   }
 
   void fetchDeck() async {
-    var doc = await FirebaseFirestore.instance
-        .collection('decks')
-        .doc(widget.deckId)
-        .get();
-
-    if (doc.exists && doc.data()?['cards'] != null) {
-      DateTime now = DateTime.now();
-      List allCards = List.from(doc['cards']);
-
-      List filtered = allCards.where((card) {
-        if (card['nextReview'] == null) return true;
-        return DateTime.parse(card['nextReview']).isBefore(now);
-      }).toList();
-
+    try {
+      var doc = await FirebaseFirestore.instance
+          .collection('decks')
+          .doc(widget.deckId)
+          .get();
       setState(() {
-        cards = filtered;
+        cards = List.from(doc['cards']);
         cards.shuffle();
-        currentIndex = 0;
-        knownCount = 0;
+        _isLoading = false;
       });
-    } else {
+    } catch (e) {
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Deck not found or has no cards.")),
+        SnackBar(
+          content: Text("Failed to load deck"),
+          backgroundColor: Colors.redAccent,
+        ),
       );
     }
   }
 
-  void markAsKnown() async {
-    setState(() {
-      knownCount++;
-    });
-    final updatedCard = Map<String, dynamic>.from(cards[currentIndex]);
-    updatedCard['nextReview'] =
-        DateTime.now().add(Duration(days: 2)).toIso8601String();
-    updatedCard['known'] = true;
-
-    cards[currentIndex] = updatedCard;
-
-    await FirebaseFirestore.instance
-        .collection('decks')
-        .doc(widget.deckId)
-        .update({'cards': cards});
-
+  void markAsKnown() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Marked as known"),
+        backgroundColor: Colors.green,
+      ),
+    );
     nextCard();
   }
 
   void markAsUnknown() {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text("Marked as unknown")));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Marked as unknown"),
+        backgroundColor: Colors.orange,
+      ),
+    );
     nextCard();
   }
 
   void nextCard() {
-    if (cards.isNotEmpty) {
-      setState(() {
-        currentIndex = (currentIndex + 1) % cards.length;
-      });
-    }
+    setState(() {
+      currentIndex = (currentIndex + 1) % cards.length;
+      if (cardKey.currentState != null && !cardKey.currentState!.isFront) {
+        cardKey.currentState!.toggleCard();
+      }
+    });
   }
 
-  void deleteDeck() async {
-    final confirm = await showDialog<bool>(
+  void _confirmDeleteDeck() {
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("Delete this deck?"),
-        content: Text("This will permanently remove the deck."),
+        title: Text("Delete Deck"),
+        content: Text("Are you sure you want to delete this deck?"),
         actions: [
           TextButton(
+            onPressed: () => Navigator.of(context).pop(),
             child: Text("Cancel"),
-            onPressed: () => Navigator.pop(context, false),
           ),
-          TextButton(
-            child: Text("Delete", style: TextStyle(color: Colors.red)),
-            onPressed: () => Navigator.pop(context, true),
+          ElevatedButton(
+            onPressed: _deleteDeck,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: Text("Delete"),
           ),
         ],
       ),
     );
+  }
 
-    if (confirm == true) {
-      try {
-        await FirebaseFirestore.instance
-            .collection('decks')
-            .doc(widget.deckId)
-            .delete();
+  void _deleteDeck() async {
+    Navigator.of(context).pop(); // Close dialog
+    try {
+      await FirebaseFirestore.instance
+          .collection('decks')
+          .doc(widget.deckId)
+          .delete();
 
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Deck deleted")),
-          );
-        }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error deleting deck: $e")),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Deck deleted successfully"),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.of(context).pop(); // Go back after deletion
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to delete deck"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -126,74 +126,157 @@ class _FlashcardViewerState extends State<FlashcardViewer> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Flashcards"),
+        title: Text(
+          "Flashcards",
+          style: TextStyle(color: Colors.white),
+        ),
+        backgroundColor: Color(0xFF00796B),
+        iconTheme: IconThemeData(color: Colors.white),
         actions: [
           IconButton(
             icon: Icon(Icons.delete),
-            onPressed: deleteDeck,
             tooltip: 'Delete Deck',
+            onPressed: _confirmDeleteDeck,
           ),
         ],
       ),
-      body: cards.isEmpty
-          ? Center(child: Text("No cards available for review."))
-          : Center(
-              child: Card(
-                margin: EdgeInsets.all(20),
-                child: Padding(
-                  padding: EdgeInsets.all(24),
+      body: _isLoading
+          ? Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00796B)),
+              ),
+            )
+          : cards.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.warning,
+                          size: 60, color: Colors.grey.shade400),
+                      SizedBox(height: 16),
+                      Text(
+                        'No cards in this deck',
+                        style: TextStyle(
+                            fontSize: 18, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                )
+              : Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        "Progress: $knownCount / ${cards.length}",
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        cards[currentIndex]['question'],
+                        '${currentIndex + 1}/${cards.length}',
                         style: TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold),
+                          color: Colors.grey.shade600,
+                          fontSize: 16,
+                        ),
                       ),
                       SizedBox(height: 20),
-                      Text(
-                        cards[currentIndex]['answer'],
-                        style: TextStyle(fontSize: 20),
+                      FlipCard(
+                        key: cardKey,
+                        direction: FlipDirection.HORIZONTAL,
+                        front: Card(
+                          margin: EdgeInsets.symmetric(horizontal: 24),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 4,
+                          child: Container(
+                            padding: EdgeInsets.all(32),
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  cards[currentIndex]['question'],
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF00796B),
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                SizedBox(height: 24),
+                                Text(
+                                  'Tap to reveal answer',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        back: Card(
+                          margin: EdgeInsets.symmetric(horizontal: 24),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 4,
+                          child: Container(
+                            padding: EdgeInsets.all(32),
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  cards[currentIndex]['answer'],
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    color: Colors.grey.shade800,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
-                      SizedBox(height: 30),
+                      SizedBox(height: 40),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           ElevatedButton.icon(
-                            icon: Icon(Icons.check),
-                            label: Text("Known"),
-                            onPressed: markAsKnown,
-                          ),
-                          ElevatedButton.icon(
-                            icon: Icon(Icons.clear),
-                            label: Text("Unknown"),
+                            icon: Icon(Icons.clear, color: Colors.white),
+                            label: Text(
+                              "Unknown",
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 16),
+                            ),
                             onPressed: markAsUnknown,
                           ),
+                          SizedBox(width: 20),
+                          ElevatedButton.icon(
+                            icon: Icon(Icons.check, color: Colors.white),
+                            label: Text(
+                              "Known",
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Color(0xFF00796B),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 16),
+                            ),
+                            onPressed: markAsKnown,
+                          ),
                         ],
-                      )
+                      ),
                     ],
                   ),
                 ),
-              ),
-            ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AddCardPage(deckId: widget.deckId),
-            ),
-          );
-          fetchDeck(); // Refresh on return
-        },
-        child: Icon(Icons.add),
-        tooltip: 'Add Card',
-      ),
     );
   }
 }
