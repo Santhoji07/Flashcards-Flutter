@@ -16,7 +16,7 @@ A comprehensive flashcards application built with Flutter. This app helps users 
 
 ---
 
-## Screenshots
+<!--## Screenshots-->
 
 <!-- Add screenshots of your app here -->
 <!-- Example: -->
